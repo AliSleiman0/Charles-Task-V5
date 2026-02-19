@@ -1,19 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server';
-import OpenAI from 'openai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 import { createClient } from '@/lib/supabase/server';
 
 export async function POST(request: NextRequest) {
   try {
-    if (!process.env.OPENAI_API_KEY) {
+    if (!process.env.GOOGLE_AI_API_KEY) {
       return NextResponse.json(
-        { error: 'OpenAI API key not configured' },
+        { error: 'Google AI API key not configured' },
         { status: 500 }
       );
     }
 
-    const openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
-    });
+    const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY);
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
     const supabase = createClient();
     const { data: { user } } = await supabase.auth.getUser();
@@ -48,32 +47,23 @@ export async function POST(request: NextRequest) {
       `- ${e.title} on ${new Date(e.event_datetime).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}${e.location ? ` at ${e.location}` : ''} (${e.status})`
     ).join('\n');
 
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-3.5-turbo',
-      messages: [
-        {
-          role: 'system',
-          content: `You are a helpful assistant that provides concise, friendly weekly schedule summaries. Summarize the user's upcoming week in 2-3 sentences. Highlight any busy days and provide a brief overview of key events. Keep it encouraging and helpful.`,
-        },
-        {
-          role: 'user',
-          content: `Here are my events for the upcoming week:\n${eventList}\n\nPlease provide a brief summary of my week.`,
-        },
-      ],
-      temperature: 0.7,
-      max_tokens: 200,
-    });
+    const prompt = `You are a helpful assistant that provides concise, friendly weekly schedule summaries. Summarize the user's upcoming week in 2-3 sentences. Highlight any busy days and provide a brief overview of key events. Keep it encouraging and helpful.
 
-    const summary = completion.choices[0]?.message?.content?.trim();
+Here are my events for the upcoming week:
+${eventList}
+
+Please provide a brief summary of my week.`;
+
+    const result = await model.generateContent(prompt);
+    const summary = result.response.text().trim();
 
     return NextResponse.json({ summary, events });
   } catch (error: any) {
     console.error('AI Weekly Summary Error:', error);
-    const message = error?.error?.message || error?.message || 'Failed to generate weekly summary';
-    const status = error?.status || 500;
+    const message = error?.message || 'Failed to generate weekly summary';
     return NextResponse.json(
       { error: message },
-      { status }
+      { status: 500 }
     );
   }
 }

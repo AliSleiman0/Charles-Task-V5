@@ -1,18 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
-import OpenAI from 'openai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 export async function POST(request: NextRequest) {
   try {
-    if (!process.env.OPENAI_API_KEY) {
+    if (!process.env.GOOGLE_AI_API_KEY) {
       return NextResponse.json(
-        { error: 'OpenAI API key not configured' },
+        { error: 'Google AI API key not configured' },
         { status: 500 }
       );
     }
 
-    const openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
-    });
+    const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY);
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
     const { title, eventType } = await request.json();
 
@@ -23,44 +22,30 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-3.5-turbo',
-      messages: [
-        {
-          role: 'system',
-          content: `You are a scheduling expert. Based on the event title/type provided, suggest the optimal day of the week and time to hold this event. Consider:
-          - Typical productivity patterns
-          - Common availability for different event types
-          - Best practices for different types of gatherings
-          
-          Respond in JSON format with these fields:
-          {
-            "suggestedDay": "Day of week",
-            "suggestedTime": "HH:MM (24-hour format)",
-            "reason": "Brief explanation (1-2 sentences)"
-          }`,
-        },
-        {
-          role: 'user',
-          content: `Suggest the best time for: "${title}"${eventType ? ` (Type: ${eventType})` : ''}`,
-        },
-      ],
-      temperature: 0.7,
-      max_tokens: 200,
-      response_format: { type: 'json_object' },
-    });
+    const prompt = `You are a scheduling expert. Based on the event title/type provided, suggest the optimal day of the week and time to hold this event. Consider:
+- Typical productivity patterns
+- Common availability for different event types
+- Best practices for different types of gatherings
 
-    const content = completion.choices[0]?.message?.content;
-    const suggestion = JSON.parse(content || '{}');
+Respond ONLY with valid JSON in this exact format (no markdown, no code blocks):
+{"suggestedDay": "Day of week", "suggestedTime": "HH:MM", "reason": "Brief explanation (1-2 sentences)"}
+
+Event: "${title}"${eventType ? ` (Type: ${eventType})` : ''}`;
+
+    const result = await model.generateContent(prompt);
+    const content = result.response.text().trim();
+    
+    // Clean up potential markdown formatting
+    const cleanedContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    const suggestion = JSON.parse(cleanedContent);
 
     return NextResponse.json(suggestion);
   } catch (error: any) {
     console.error('AI Time Suggestion Error:', error);
-    const message = error?.error?.message || error?.message || 'Failed to generate time suggestion';
-    const status = error?.status || 500;
+    const message = error?.message || 'Failed to generate time suggestion';
     return NextResponse.json(
       { error: message },
-      { status }
+      { status: 500 }
     );
   }
 }

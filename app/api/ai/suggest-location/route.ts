@@ -1,18 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
-import OpenAI from 'openai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 export async function POST(request: NextRequest) {
   try {
-    if (!process.env.OPENAI_API_KEY) {
+    if (!process.env.GOOGLE_AI_API_KEY) {
       return NextResponse.json(
-        { error: 'OpenAI API key not configured' },
+        { error: 'Google AI API key not configured' },
         { status: 500 }
       );
     }
 
-    const openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
-    });
+    const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY);
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
     const { title, description } = await request.json();
 
@@ -23,41 +22,27 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-3.5-turbo',
-      messages: [
-        {
-          role: 'system',
-          content: `You are an event venue expert. Based on the event title and description, suggest appropriate venue types or location ideas. Provide 3 suggestions ranging from casual to more formal options.
-          
-          Respond in JSON format:
-          {
-            "suggestions": [
-              { "type": "Venue type", "description": "Brief explanation" }
-            ]
-          }`,
-        },
-        {
-          role: 'user',
-          content: `Suggest locations for: "${title}"${description ? `\nDescription: ${description}` : ''}`,
-        },
-      ],
-      temperature: 0.7,
-      max_tokens: 300,
-      response_format: { type: 'json_object' },
-    });
+    const prompt = `You are an event venue expert. Based on the event title and description, suggest appropriate venue types or location ideas. Provide 3 suggestions ranging from casual to more formal options.
 
-    const content = completion.choices[0]?.message?.content;
-    const result = JSON.parse(content || '{"suggestions":[]}');
+Respond ONLY with valid JSON in this exact format (no markdown, no code blocks):
+{"suggestions": [{"type": "Venue type", "description": "Brief explanation"}, {"type": "Venue type 2", "description": "Brief explanation"}, {"type": "Venue type 3", "description": "Brief explanation"}]}
 
-    return NextResponse.json(result);
+Event: "${title}"${description ? `\nDescription: ${description}` : ''}`;
+
+    const result = await model.generateContent(prompt);
+    const content = result.response.text().trim();
+    
+    // Clean up potential markdown formatting
+    const cleanedContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+    const parsed = JSON.parse(cleanedContent);
+
+    return NextResponse.json(parsed);
   } catch (error: any) {
     console.error('AI Location Suggestion Error:', error);
-    const message = error?.error?.message || error?.message || 'Failed to generate location suggestions';
-    const status = error?.status || 500;
+    const message = error?.message || 'Failed to generate location suggestions';
     return NextResponse.json(
       { error: message },
-      { status }
+      { status: 500 }
     );
   }
 }

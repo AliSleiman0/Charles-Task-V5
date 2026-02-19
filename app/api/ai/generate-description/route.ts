@@ -1,18 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server';
-import OpenAI from 'openai';
+import { GoogleGenerativeAI } from '@google/generative-ai';
 
 export async function POST(request: NextRequest) {
   try {
-    if (!process.env.OPENAI_API_KEY) {
+    if (!process.env.GOOGLE_AI_API_KEY) {
       return NextResponse.json(
-        { error: 'OpenAI API key not configured' },
+        { error: 'Google AI API key not configured' },
         { status: 500 }
       );
     }
 
-    const openai = new OpenAI({
-      apiKey: process.env.OPENAI_API_KEY,
-    });
+    const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY);
+    const model = genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
 
     const { title } = await request.json();
 
@@ -23,32 +22,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-3.5-turbo',
-      messages: [
-        {
-          role: 'system',
-          content: `You are an expert event planner assistant. Generate a professional and engaging event description based on the event title provided. Keep it concise (2-3 sentences), informative, and inviting. Don't include any placeholders or brackets.`,
-        },
-        {
-          role: 'user',
-          content: `Generate a description for an event titled: "${title}"`,
-        },
-      ],
-      temperature: 0.7,
-      max_tokens: 150,
-    });
+    const prompt = `You are an expert event planner assistant. Generate a professional and engaging event description based on the event title provided. Keep it concise (2-3 sentences), informative, and inviting. Don't include any placeholders or brackets.
 
-    const description = completion.choices[0]?.message?.content?.trim();
+Generate a description for an event titled: "${title}"`;
+
+    const result = await model.generateContent(prompt);
+    const description = result.response.text().trim();
 
     return NextResponse.json({ description });
   } catch (error: any) {
     console.error('AI Description Error:', error);
-    const message = error?.error?.message || error?.message || 'Failed to generate description';
-    const status = error?.status || 500;
+    const message = error?.message || 'Failed to generate description';
     return NextResponse.json(
       { error: message },
-      { status }
+      { status: 500 }
     );
   }
 }
