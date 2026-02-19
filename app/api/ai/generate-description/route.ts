@@ -1,17 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import Groq from 'groq-sdk';
 
 export async function POST(request: NextRequest) {
   try {
-    if (!process.env.GOOGLE_AI_API_KEY) {
+    if (!process.env.GROQ_API_KEY) {
       return NextResponse.json(
-        { error: 'Google AI API key not configured' },
+        { error: 'Groq API key not configured' },
         { status: 500 }
       );
     }
 
-    const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
     const { title } = await request.json();
 
@@ -22,12 +21,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const prompt = `You are an expert event planner assistant. Generate a professional and engaging event description based on the event title provided. Keep it concise (2-3 sentences), informative, and inviting. Don't include any placeholders or brackets.
+    const completion = await groq.chat.completions.create({
+      model: 'llama-3.1-8b-instant',
+      messages: [
+        {
+          role: 'system',
+          content: 'You are an expert event planner assistant. Generate a professional and engaging event description based on the event title provided. Keep it concise (2-3 sentences), informative, and inviting. Don\'t include any placeholders or brackets.',
+        },
+        {
+          role: 'user',
+          content: `Generate a description for an event titled: "${title}"`,
+        },
+      ],
+      temperature: 0.7,
+      max_tokens: 150,
+    });
 
-Generate a description for an event titled: "${title}"`;
-
-    const result = await model.generateContent(prompt);
-    const description = result.response.text().trim();
+    const description = completion.choices[0]?.message?.content?.trim();
 
     return NextResponse.json({ description });
   } catch (error: any) {

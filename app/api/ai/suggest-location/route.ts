@@ -1,17 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import Groq from 'groq-sdk';
 
 export async function POST(request: NextRequest) {
   try {
-    if (!process.env.GOOGLE_AI_API_KEY) {
+    if (!process.env.GROQ_API_KEY) {
       return NextResponse.json(
-        { error: 'Google AI API key not configured' },
+        { error: 'Groq API key not configured' },
         { status: 500 }
       );
     }
 
-    const genAI = new GoogleGenerativeAI(process.env.GOOGLE_AI_API_KEY);
-    const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+    const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
     const { title, description } = await request.json();
 
@@ -22,15 +21,26 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const prompt = `You are an event venue expert. Based on the event title and description, suggest appropriate venue types or location ideas. Provide 3 suggestions ranging from casual to more formal options.
+    const completion = await groq.chat.completions.create({
+      model: 'llama-3.1-8b-instant',
+      messages: [
+        {
+          role: 'system',
+          content: `You are an event venue expert. Based on the event title and description, suggest appropriate venue types or location ideas. Provide 3 suggestions ranging from casual to more formal options.
 
 Respond ONLY with valid JSON in this exact format (no markdown, no code blocks):
-{"suggestions": [{"type": "Venue type", "description": "Brief explanation"}, {"type": "Venue type 2", "description": "Brief explanation"}, {"type": "Venue type 3", "description": "Brief explanation"}]}
+{"suggestions": [{"type": "Venue type", "description": "Brief explanation"}, {"type": "Venue type 2", "description": "Brief explanation"}, {"type": "Venue type 3", "description": "Brief explanation"}]}`,
+        },
+        {
+          role: 'user',
+          content: `Suggest locations for: "${title}"${description ? `\nDescription: ${description}` : ''}`,
+        },
+      ],
+      temperature: 0.7,
+      max_tokens: 300,
+    });
 
-Event: "${title}"${description ? `\nDescription: ${description}` : ''}`;
-
-    const result = await model.generateContent(prompt);
-    const content = result.response.text().trim();
+    const content = completion.choices[0]?.message?.content?.trim() || '{"suggestions":[]}';
     
     // Clean up potential markdown formatting
     const cleanedContent = content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
