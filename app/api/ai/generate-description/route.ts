@@ -42,11 +42,13 @@ export async function POST(request: NextRequest) {
     const description = completion.choices[0]?.message?.content?.trim();
 
     return NextResponse.json({ description });
-  } catch (error) {
+  } catch (error: any) {
     console.error('AI Description Error:', error);
+    const message = error?.error?.message || error?.message || 'Failed to generate description';
+    const status = error?.status || 500;
     return NextResponse.json(
-      { error: 'Failed to generate description' },
-      { status: 500 }
+      { error: message },
+      { status }
     );
   }
 }

@@ -1,4 +1,3 @@
-
 # Event Scheduler Application
 
 A modern, production-ready event scheduling application built with Next.js, Supabase, and OpenAI. Features intelligent AI-powered event management, invitations system, and a beautiful responsive UI.

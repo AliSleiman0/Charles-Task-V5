@@ -51,11 +51,13 @@ export async function POST(request: NextRequest) {
     const result = JSON.parse(content || '{"suggestions":[]}');
 
     return NextResponse.json(result);
-  } catch (error) {
+  } catch (error: any) {
     console.error('AI Location Suggestion Error:', error);
+    const message = error?.error?.message || error?.message || 'Failed to generate location suggestions';
+    const status = error?.status || 500;
     return NextResponse.json(
-      { error: 'Failed to generate location suggestions' },
-      { status: 500 }
+      { error: message },
+      { status }
     );
   }
 }

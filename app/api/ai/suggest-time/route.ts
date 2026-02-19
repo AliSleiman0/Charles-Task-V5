@@ -54,11 +54,13 @@ export async function POST(request: NextRequest) {
     const suggestion = JSON.parse(content || '{}');
 
     return NextResponse.json(suggestion);
-  } catch (error) {
+  } catch (error: any) {
     console.error('AI Time Suggestion Error:', error);
+    const message = error?.error?.message || error?.message || 'Failed to generate time suggestion';
+    const status = error?.status || 500;
     return NextResponse.json(
-      { error: 'Failed to generate time suggestion' },
-      { status: 500 }
+      { error: message },
+      { status }
     );
   }
 }
